@@ -35,7 +35,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Login to GHCR
-        run: echo "$GITHUB_PAT" | docker login ghcr.io --username "$GITHUB_OWNER" --password-stdin
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
       - name: Build and push image
         env:
           IMAGE: ghcr.io/el-baca-org/vasati-web
