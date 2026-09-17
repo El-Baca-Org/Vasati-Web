@@ -1,0 +1,33 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+      - name: Build core
+        run: |
+          mkdir -p lib
+          make topla
+      - name: Run C++ tests
+        run: |
+          mkdir -p lib
+          g++ -I ./include -I ./include/include-class \
+            tests/test_zaman.cpp ./lib/zaman.o ./lib/pugi.o \
+            -o ./run_tests_ci
+          ./run_tests_ci
+      - name: Build container
+        run: docker build --tag vasati-web:ci .
