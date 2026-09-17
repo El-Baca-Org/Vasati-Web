@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   build-test:
@@ -25,7 +24,7 @@ jobs:
       - name: Run tests
         run: npm test -- --passWithNoTests
       - name: Build container
-        run: docker build --tag vasati-web:ci .
+        run: docker build --tag vasati-web:latest .
 
   deploy:
     name: Deploy to Rancher
@@ -34,25 +33,12 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - name: Login to GHCR
-        env:
-          GHCR_TOKEN: ${{ github.token }}
-        run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-      - name: Build and push image
-        env:
-          IMAGE: ghcr.io/el-baca-org/vasati-web
+      - name: Build release image
+        run: docker build --tag vasati-web:latest .
+      - name: Import image into K3s
         run: |
-          docker build --tag "$IMAGE:${GITHUB_SHA}" --tag "$IMAGE:latest" .
-          docker push "$IMAGE:${GITHUB_SHA}"
-          docker push "$IMAGE:latest"
-      - name: Refresh image pull secret
-        run: |
-          kubectl -n vasati-web create secret docker-registry ghcr-pull \
-            --docker-server=ghcr.io \
-            --docker-username="$GITHUB_OWNER" \
-            --docker-password="$GITHUB_PAT" \
-            --docker-email="muhammed.samil.albayrak@gmail.com" \
-            --dry-run=client -o yaml | kubectl apply -f -
+          docker save vasati-web:latest > /tmp/vasati-web.tar
+          docker run --rm -i --privileged -v /:/host alpine:3.22 sh -c "cat > /host/tmp/vasati-web.tar && chroot /host /usr/local/bin/k3s ctr -n k8s.io images import /tmp/vasati-web.tar && rm -f /host/tmp/vasati-web.tar"
       - name: Deploy
         run: kubectl apply -f k8s/vasati-web.yaml
       - name: Rollout

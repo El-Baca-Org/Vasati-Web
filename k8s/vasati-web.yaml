@@ -13,12 +13,10 @@ spec:
       labels:
         app: vasati-web
     spec:
-      imagePullSecrets:
-        - name: ghcr-pull
       containers:
         - name: web
-          image: ghcr.io/el-baca-org/vasati-web:latest
-          imagePullPolicy: Always
+          image: vasati-web:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 80
           resources:
