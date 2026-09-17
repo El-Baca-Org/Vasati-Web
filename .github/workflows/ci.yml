@@ -11,23 +11,49 @@ permissions:
   packages: write
 
 jobs:
-  build-test:
-    name: Build & Test
-    runs-on: ubuntu-24.04
+  web-build:
+    name: Web Build
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential
-      - name: Build core
-        run: |
-          mkdir -p lib
-          make topla
-      - name: Run C++ tests
-        run: |
-          mkdir -p lib
-          g++ -I ./include -I ./include/include-class \
-            tests/test_zaman.cpp ./lib/zaman.o ./lib/pugi.o \
-            -o ./run_tests_ci
-          ./run_tests_ci
+      - name: Install Node dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build web app
+        run: npm run build
+      - name: Run tests
+        run: npm test -- --passWithNoTests
       - name: Build container
         run: docker build --tag vasati-web:ci .
+
+  deploy:
+    name: Deploy to Rancher
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: web-build
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to GHCR
+        run: echo "$GITHUB_PAT" | docker login ghcr.io --username "$GITHUB_OWNER" --password-stdin
+      - name: Build and push image
+        env:
+          IMAGE: ghcr.io/el-baca-org/vasati-web
+        run: |
+          docker build --tag "$IMAGE:${GITHUB_SHA}" --tag "$IMAGE:latest" .
+          docker push "$IMAGE:${GITHUB_SHA}"
+          docker push "$IMAGE:latest"
+      - name: Refresh image pull secret
+        run: |
+          kubectl -n vasati-web create secret docker-registry ghcr-pull \
+            --docker-server=ghcr.io \
+            --docker-username="$GITHUB_OWNER" \
+            --docker-password="$GITHUB_PAT" \
+            --docker-email="muhammed.samil.albayrak@gmail.com" \
+            --dry-run=client -o yaml | kubectl apply -f -
+      - name: Deploy
+        run: kubectl apply -f k8s/vasati-web.yaml
+      - name: Rollout
+        run: kubectl -n vasati-web rollout status deployment/vasati-web --timeout=180s
+      - name: Smoke test
+        run: curl --fail --silent --show-error https://vasati.konstantiniyye.studio/ >/dev/null
