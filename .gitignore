@@ -3,5 +3,6 @@ Vasati
 VasatiTest
 node_modules
 dist
+*.tsbuildinfo
 .env
 .env.*
